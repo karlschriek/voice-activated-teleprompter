@@ -8,7 +8,6 @@ export interface NavBarSliceState {
   fontSize: number
   margin: number
   opacity: number
-  scrollOffset: number
   language: string
 }
 
@@ -52,20 +51,15 @@ const loadBool = (key: string, fallback: boolean): boolean => {
   return stored === null ? fallback : stored === "true"
 }
 
-// Default settings, tuned for reading at camera distance:
-//   fontSize 90  — large, readable a few feet back
-//   margin  240  — wide margins → narrow text column, short easy-to-scan lines
-//   opacity 100  — full brightness
-//   scrollOffset 400 — active line sits ~⅓ down the screen, keeping several lines
-//                      of read text visible above it (range now 0–1000)
+// Defaults tuned for reading at camera distance (7 visible lines at 110/480).
+// The active reading line is fixed at screen centre in Content.tsx.
 const initialState: NavBarSliceState = {
   status: "stopped",
   horizontallyFlipped: loadBool("teleprompter-flip-h", false),
   verticallyFlipped: loadBool("teleprompter-flip-v", false),
-  fontSize: loadNumber("teleprompter-font-size", 90),
-  margin: loadNumber("teleprompter-margin", 240),
+  fontSize: loadNumber("teleprompter-font-size", 110),
+  margin: loadNumber("teleprompter-margin", 480),
   opacity: loadNumber("teleprompter-opacity", 100),
-  scrollOffset: loadNumber("teleprompter-scroll-offset", 400),
   language: detectLanguage(),
 }
 
@@ -118,11 +112,6 @@ export const navbarSlice = createAppSlice({
       localStorage.setItem("teleprompter-opacity", String(action.payload))
     }),
 
-    setScrollOffset: create.reducer((state, action: PayloadAction<number>) => {
-      state.scrollOffset = action.payload
-      localStorage.setItem("teleprompter-scroll-offset", String(action.payload))
-    }),
-
     setLanguage: create.reducer((state, action: PayloadAction<string>) => {
       state.language = action.payload
       localStorage.setItem("teleprompter-language", action.payload)
@@ -136,7 +125,6 @@ export const navbarSlice = createAppSlice({
     selectHorizontallyFlipped: state => state.horizontallyFlipped,
     selectVerticallyFlipped: state => state.verticallyFlipped,
     selectOpacity: state => state.opacity,
-    selectScrollOffset: state => state.scrollOffset,
     selectLanguage: state => state.language,
   },
 })
@@ -151,7 +139,6 @@ export const {
   setFontSize,
   setMargin,
   setOpacity,
-  setScrollOffset,
   setLanguage,
 } = navbarSlice.actions
 
@@ -162,6 +149,5 @@ export const {
   selectHorizontallyFlipped,
   selectVerticallyFlipped,
   selectOpacity,
-  selectScrollOffset,
   selectLanguage,
 } = navbarSlice.selectors

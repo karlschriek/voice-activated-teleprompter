@@ -12,13 +12,11 @@ import {
   setFontSize,
   setMargin,
   setOpacity,
-  setScrollOffset,
   setLanguage,
   selectStatus,
   selectFontSize,
   selectMargin,
   selectOpacity,
-  selectScrollOffset,
   selectLanguage,
   SUPPORTED_LOCALES,
 } from "./navbarSlice"
@@ -43,7 +41,6 @@ export const NavBar = () => {
   const fontSize = useAppSelector(selectFontSize)
   const margin = useAppSelector(selectMargin)
   const opacity = useAppSelector(selectOpacity)
-  const scrollOffset = useAppSelector(selectScrollOffset)
   const language = useAppSelector(selectLanguage)
 
   const [episodeId, setEpisodeId] = useState<string>(EPISODES[0]?.id ?? "")
@@ -187,6 +184,7 @@ export const NavBar = () => {
                     dispatch(setFontSize(parseInt(e.currentTarget.value, 10)))
                   }
                 />
+                <span className="slider-value">{fontSize}</span>
               </div>
               <div className="navbar-item slider">
                 <span>Margin:</span>
@@ -200,6 +198,7 @@ export const NavBar = () => {
                     dispatch(setMargin(parseInt(e.currentTarget.value, 10)))
                   }
                 />
+                <span className="slider-value">{margin}</span>
               </div>
               <div className="navbar-item slider">
                 <span>Brightness:</span>
@@ -213,19 +212,7 @@ export const NavBar = () => {
                     dispatch(setOpacity(parseInt(e.currentTarget.value, 10)))
                   }
                 />
-              </div>
-              <div className="navbar-item slider">
-                <span>Line position:</span>
-                <input
-                  type="range"
-                  step="10"
-                  min="0"
-                  max="1000"
-                  value={scrollOffset}
-                  onChange={e =>
-                    dispatch(setScrollOffset(parseInt(e.currentTarget.value, 10)))
-                  }
-                />
+                <span className="slider-value">{opacity}</span>
               </div>
             </>
           ) : null}

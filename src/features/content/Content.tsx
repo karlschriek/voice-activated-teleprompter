@@ -10,7 +10,6 @@ import {
   selectFontSize,
   selectMargin,
   selectOpacity,
-  selectScrollOffset,
 } from "../navbar/navbarSlice"
 
 import {
@@ -21,6 +20,20 @@ import {
 } from "./contentSlice"
 
 import { startTeleprompter, stopTeleprompter } from "../../app/thunks"
+import {
+  buildLayoutMap,
+  pxAt,
+  slopeAt,
+  ReadingTracker,
+  type LayoutMap,
+} from "../../lib/reading-tracker"
+
+// Scroll control constants — see SMOOTH.md §2.5 and §3.3.
+const A_MAX = 300 // px/s²; velocity rate limit (the smoothness knob)
+const V_MAX = 900 // px/s
+const M_MAX = 2.5 // catch-up multiplier at the hard floor
+const T_EMERG = 0.6 // s; horizon for the beyond-hard-floor emergency term
+const DEBUG = true
 
 export const Content = () => {
   const dispatch = useAppDispatch()
@@ -29,7 +42,6 @@ export const Content = () => {
   const fontSize = useAppSelector(selectFontSize)
   const margin = useAppSelector(selectMargin)
   const opacity = useAppSelector(selectOpacity)
-  const scrollOffset = useAppSelector(selectScrollOffset)
   const horizontallyFlipped = useAppSelector(selectHorizontallyFlipped)
   const verticallyFlipped = useAppSelector(selectVerticallyFlipped)
   const rawText = useAppSelector(selectRawText)
@@ -43,133 +55,111 @@ export const Content = () => {
   }
 
   const containerRef = useRef<null | HTMLDivElement>(null)
-  const lastRef = useRef<null | HTMLDivElement>(null)
-  const pendingHintRef = useRef<null | HTMLDivElement>(null)
   const bottomSpacerRef = useRef<null | HTMLDivElement>(null)
 
-  // Index of the anchor and of the first not-yet-spoken [bracket] hint after it.
-  // Used to keep a pending hint pinned at the top edge rather than scrolled away.
-  const anchorIndex =
-    interimTranscriptIndex > 0
-      ? Math.min(interimTranscriptIndex + 2, textElements.length - 1)
-      : -1
-  const firstPendingHintIndex = textElements.findIndex(
-    (el, i) => i > anchorIndex && el.value.startsWith("["),
-  )
-
-  // Continuous scrolling that never stalls between recognition bursts.
-  //
-  // The problem: recognition advances the target position in discrete jumps (a burst
-  // of words at once). Anything that races the scroll TO the target then waits will
-  // "stand still, then jump" — because between bursts the target is constant, so the
-  // scroll arrives and stops until the next burst.
-  //
-  // The fix: drive the scroll by a *persistent estimated speed*. We measure how much
-  // the target advances per second (px/sec) with a slow-decaying average, so the
-  // estimate survives the quiet gaps between bursts and keeps the page gliding at a
-  // steady pace. A gentle position term only trims that speed to stay aligned — it
-  // never becomes the sole driver, so the scroll doesn't stall on-target.
-  const targetScrollRef = useRef(0) // where recognition says you are (px)
-  const prevTargetRef = useRef(0) // target last frame, to measure its advance
-  const speedRef = useRef(0) // persistent estimated scroll speed (px/sec)
-  const scrollPosRef = useRef(0) // float scroll position (DOM scrollTop rounds; we don't)
+  const layoutRef = useRef<LayoutMap | null>(null)
+  const trackerRef = useRef(new ReadingTracker())
+  const scrollPosRef = useRef(0)
+  const velRef = useRef(0)
   const rafRef = useRef<number | null>(null)
   const lastTimeRef = useRef<number | null>(null)
+  const debugCountRef = useRef(0)
 
-  // Tunables:
-  const SPEED_DECAY = 0.22 // per second; how fast the speed estimate fades toward the
-  //                          instantaneous target-advance. Lower = steadier glide that
-  //                          coasts through gaps; higher = tracks pace changes faster.
-  const ALIGN = 0.35 // per second; gentle pull that keeps the scroll aligned with the
-  //                    true target. Lower = smoother/steadier (less surge-and-settle per
-  //                    burst); higher = tighter tracking but more speed pulsing.
-  const ALIGN_DEADZONE = 40 // px; ignore small gaps so ordinary burst-to-burst lag
-  //                            doesn't constantly nudge the speed. Only correct real drift.
-
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = containerRef.current
-    const anchor = lastRef.current
-    if (!el || !anchor) {
-      targetScrollRef.current = 0
+    if (!el || status === "editing") {
+      layoutRef.current = null
       return
     }
-
-    // Intra-line target. `offsetTop` alone is the same for every word on a visual
-    // line, so the target only steps at line ENDS — reading across a line moves
-    // nothing, then it jumps a whole line. That staircase is what reads as jitter,
-    // and no amount of velocity smoothing hides it because the signal is line-
-    // quantised. Fix: add how far ACROSS the line the anchor word sits (its
-    // horizontal fraction) as a fraction of a line-height, so the target creeps
-    // smoothly down as you read the line and simply continues at the wrap.
-    const lineHeight = anchor.offsetHeight || fontSize
-    // Usable horizontal span of a line: the content box minus its horizontal padding
-    // (the `margin` setting is applied as left/right padding on the content). offsetLeft
-    // is measured from the padding-box edge, so subtract the left padding to make the
-    // fraction run 0→1 across the actual text column.
-    const usableWidth = Math.max(1, el.clientWidth - 2 * margin)
-    const fraction = Math.min(
-      1,
-      Math.max(0, (anchor.offsetLeft - margin) / usableWidth),
-    )
-
-    targetScrollRef.current = Math.max(
-      anchor.offsetTop + fraction * lineHeight - scrollOffset,
-      0,
-    )
-  }, [interimTranscriptIndex, finalTranscriptIndex, scrollOffset, fontSize, margin])
+    layoutRef.current = buildLayoutMap(el, textElements)
+  }, [textElements, fontSize, margin, status])
 
   useEffect(() => {
-    const step = (now: number) => {
+    const onResize = () => {
+      const el = containerRef.current
+      if (el && status !== "editing") {
+        layoutRef.current = buildLayoutMap(el, textElements)
+      }
+    }
+    window.addEventListener("resize", onResize)
+    return () => window.removeEventListener("resize", onResize)
+  }, [textElements, status])
+
+  useEffect(() => {
+    if (interimTranscriptIndex < 0) {
+      trackerRef.current.reset()
+      return
+    }
+    const map = layoutRef.current
+    if (!map || map.elementToOrdinal.length === 0) return
+    const i = Math.min(
+      Math.max(interimTranscriptIndex, 0),
+      map.elementToOrdinal.length - 1,
+    )
+    const ord = map.elementToOrdinal[i]
+    if (ord >= 0) trackerRef.current.observe(ord, performance.now() / 1000)
+  }, [interimTranscriptIndex])
+
+  useEffect(() => {
+    const step = (nowMs: number) => {
       const el = containerRef.current
       const last = lastTimeRef.current
-      lastTimeRef.current = now
-      const dt = last === null ? 0 : Math.min((now - last) / 1000, 0.1)
+      lastTimeRef.current = nowMs
+      const dt = last === null ? 0 : Math.min((nowMs - last) / 1000, 0.1)
+      const map = layoutRef.current
+      const tracker = trackerRef.current
 
-      if (el && dt > 0) {
-        let target = targetScrollRef.current
-
-        // Keep a pending [bracket] hint from scrolling off the top edge (stays
-        // visible; the readable text below it never gets hidden, so no deadlock).
-        const hint = pendingHintRef.current
-        if (hint) target = Math.min(target, hint.offsetTop)
-
-        // Resync our float position if something external moved the scroll (arrow
-        // keys, clicking a word) — a large mismatch means a manual jump happened.
+      if (el && map && dt > 0) {
         if (Math.abs(el.scrollTop - scrollPosRef.current) > 4) {
           scrollPosRef.current = el.scrollTop
         }
 
-        // Persistent speed estimate: how fast the target is advancing (px/sec),
-        // averaged with slow decay so it coasts smoothly through the silent gaps
-        // between bursts instead of dropping to zero.
-        const instantSpeed = (target - prevTargetRef.current) / dt
-        prevTargetRef.current = target
-        const decay = Math.min(1, SPEED_DECAY * dt)
-        speedRef.current += (Math.max(0, instantSpeed) - speedRef.current) * decay
+        tracker.predict(dt, nowMs / 1000)
 
-        // Gentle alignment: a slow pull toward the true target, added to the glide
-        // speed rather than replacing it — so we stay in sync without racing+stalling.
-        // A deadzone ignores the small, ever-present burst-to-burst lag so the speed
-        // isn't constantly nudged up and down (that pulsing is what reads as
-        // speeding-up-and-slowing-down); only genuine drift past the deadzone corrects.
-        const gap = target - scrollPosRef.current
-        const alignGap =
-          gap > ALIGN_DEADZONE
-            ? gap - ALIGN_DEADZONE
-            : gap < -ALIGN_DEADZONE
-              ? gap + ALIGN_DEADZONE
-              : 0
-        const alignSpeed = alignGap * ALIGN
+        const lineH = map.lineH
+        const p = pxAt(map, tracker.w)
+        const N = el.clientHeight / lineH
+        const dHard = Math.max(0.5, N / 2 - 1)
+        const d0 = Math.min(1, dHard / 2)
+        const d = (p - scrollPosRef.current) / lineH - N / 2
 
-        const vel = Math.max(0, speedRef.current + alignSpeed)
-        scrollPosRef.current += vel * dt
+        // Continuous speed-shaping curve m(d): 0 at the ceiling, 1 in the ideal
+        // band, M_MAX at the floor.
+        let m: number
+        if (d <= -dHard) m = 0
+        else if (d < -d0) m = (d + dHard) / (dHard - d0)
+        else if (d <= d0) m = 1
+        else if (d < dHard) m = 1 + ((M_MAX - 1) * (d - d0)) / (dHard - d0)
+        else m = M_MAX
 
-        // Don't overshoot past the target on the alignment pull.
-        if (scrollPosRef.current > target && speedRef.current < 1) {
-          scrollPosRef.current = target
+        const vff = tracker.v * slopeAt(map, tracker.w)
+        let vcmd = vff * m
+        if (d > dHard) vcmd += ((d - dHard) * lineH) / T_EMERG
+        vcmd = Math.min(Math.max(vcmd, 0), V_MAX)
+
+        velRef.current += Math.min(
+          Math.max(vcmd - velRef.current, -A_MAX * dt),
+          A_MAX * dt,
+        )
+        scrollPosRef.current += velRef.current * dt
+
+        // Safety backstop: reader never above the second visible line. Only binds
+        // on teleports (m(d) reaches 0 before this in normal operation).
+        const maxS = Math.max(0, p - lineH)
+        if (scrollPosRef.current > maxS) {
+          scrollPosRef.current = maxS
+          velRef.current = 0
         }
+        if (scrollPosRef.current < 0) scrollPosRef.current = 0
 
         el.scrollTop = scrollPosRef.current
+
+        if (DEBUG && ++debugCountRef.current % 30 === 0) {
+          // eslint-disable-next-line no-console
+          console.log(
+            `d=${d.toFixed(2)} v=${velRef.current.toFixed(0)} vff=${vff.toFixed(0)} m=${m.toFixed(2)} w=${tracker.w.toFixed(1)} vtok=${tracker.v.toFixed(2)} innov=${tracker.lastInnovation.toFixed(1)} N=${N.toFixed(1)}`,
+          )
+        }
       }
 
       rafRef.current = requestAnimationFrame(step)
@@ -184,10 +174,8 @@ export const Content = () => {
     if (!containerRef.current || !bottomSpacerRef.current) {
       return
     }
-
-    const containerHeight = containerRef.current.clientHeight
-    bottomSpacerRef.current.style.height = `${scrollOffset + containerHeight}px`
-  }, [scrollOffset, textElements.length])
+    bottomSpacerRef.current.style.height = `${containerRef.current.clientHeight}px`
+  }, [textElements.length])
 
   useEffect(() => {
     const handleKeyPress = (event: KeyboardEvent) => {
@@ -249,26 +237,8 @@ export const Content = () => {
             transform: `scale(${horizontallyFlipped ? "-1" : "1"}, ${verticallyFlipped ? "-1" : "1"})`,
           }}
         >
-          {textElements.map((textElement, index, array) => {
-            // Scroll anchor: look ~2 elements ahead of the last spoken word so the
-            // reading line leads slightly.
-            const anchor =
-              interimTranscriptIndex > 0
-                ? Math.min(interimTranscriptIndex + 2, array.length - 1)
-                : -1
-
-            // The first not-yet-spoken [bracket] hint. We tag it so the scroll can
-            // keep it from being pushed above the top edge (see the rAF loop): the
-            // page still advances as you read, but a pending hint stops rising at the
-            // top instead of vanishing — so it stays readable without deadlocking.
-            const isPendingHint =
-              index > anchor && textElement.value.startsWith("[")
-            const itemProps =
-              index === anchor
-                ? { ref: lastRef }
-                : isPendingHint && index === firstPendingHintIndex
-                  ? { ref: pendingHintRef }
-                  : {}
+          {textElements.map(textElement => {
+            const index = textElement.index
             return (
               <span
                 key={textElement.index}
@@ -285,7 +255,6 @@ export const Content = () => {
                       ? "interim-transcript"
                       : "has-text-white"
                 }
-                {...itemProps}
                 dangerouslySetInnerHTML={{
                   __html: escape(textElement.value).replace(/\n/g, "<br>"),
                 }}

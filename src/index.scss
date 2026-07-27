@@ -88,6 +88,14 @@ input[type="range"] {
   accent-color: $info;
 }
 
+.slider-value {
+  margin-left: 0.5em;
+  min-width: 2.5em;
+  text-align: right;
+  color: $grey-light;
+  font-variant-numeric: tabular-nums;
+}
+
 .navbar-brand ul {
   margin-top: 0.3em;
 }

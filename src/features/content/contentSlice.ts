@@ -10,7 +10,19 @@ export interface ContentSliceState {
   interimTranscriptIndex: number
 }
 
-const initialText = 'Click on the "Edit" button and paste your content here...'
+const initialText = `[LOOK AT LENS]
+
+This is Snap CD, an open-source deployment orchestrator that manages the dependencies between your Terraform and OpenTofu state files.
+
+[pause — let the name land]
+
+If you've run Terraform at any real scale, you know this pattern. You start with one state file. It works great. Then it grows. And grows.
+
+[now go off script and say anything — the scroll should keep following you]
+
+The tooling that made this easy at the start is what makes it hard now.
+
+[end of test — press Escape to stop, or the Edit button to paste your own script]`
 
 const initialState: ContentSliceState = {
   rawText: initialText,
@@ -29,6 +41,9 @@ export const contentSlice = createAppSlice({
   reducers: create => ({
     setContent: create.reducer((state, action: PayloadAction<string>) => {
       state.rawText = action.payload
+      // Re-tokenize here so setting content takes effect immediately (e.g. loading a
+      // beat from the dropdown), not only when leaving edit mode.
+      state.textElements = tokenize(action.payload)
       state.finalTranscriptIndex = -1
       state.interimTranscriptIndex = -1
     }),

@@ -13,13 +13,13 @@ export interface NavBarSliceState {
 }
 
 export const SUPPORTED_LOCALES = {
-  "nl-NL": "🇳🇱 Dutch (Netherlands)",
-  "en-US": "🇺🇸 English (USA)",
-  "fr-FR": "🇫🇷 French (France)",
-  "de-DE": "🇩🇪 German (Germany)",
-  "it-IT": "🇮🇹 Italian (Italy)",
-  "pt-BR": "🇧🇷 Portuguese (Brazil)",
-  "es-ES": "🇪🇸 Spanish (Spain)",
+  "nl-NL": "Dutch (Netherlands)",
+  "en-US": "English (USA)",
+  "fr-FR": "French (France)",
+  "de-DE": "German (Germany)",
+  "it-IT": "Italian (Italy)",
+  "pt-BR": "Portuguese (Brazil)",
+  "es-ES": "Spanish (Spain)",
 }
 
 // Detect browser language and default to pt-BR if Portuguese, otherwise en-US
@@ -38,14 +38,34 @@ const detectLanguage = (): string => {
   return "en-US"
 }
 
+// Persisted numeric settings. Each setting is remembered in localStorage so it
+// survives a reload; on first run (nothing stored) it falls back to the default.
+const loadNumber = (key: string, fallback: number): number => {
+  const stored = localStorage.getItem(key)
+  if (stored === null) return fallback
+  const n = parseInt(stored, 10)
+  return Number.isFinite(n) ? n : fallback
+}
+
+const loadBool = (key: string, fallback: boolean): boolean => {
+  const stored = localStorage.getItem(key)
+  return stored === null ? fallback : stored === "true"
+}
+
+// Default settings, tuned for reading at camera distance:
+//   fontSize 90  — large, readable a few feet back
+//   margin  240  — wide margins → narrow text column, short easy-to-scan lines
+//   opacity 100  — full brightness
+//   scrollOffset 400 — active line sits ~⅓ down the screen, keeping several lines
+//                      of read text visible above it (range now 0–1000)
 const initialState: NavBarSliceState = {
   status: "stopped",
-  horizontallyFlipped: false,
-  verticallyFlipped: false,
-  fontSize: 30,
-  margin: 10,
-  opacity: 80,
-  scrollOffset: 100,
+  horizontallyFlipped: loadBool("teleprompter-flip-h", false),
+  verticallyFlipped: loadBool("teleprompter-flip-v", false),
+  fontSize: loadNumber("teleprompter-font-size", 90),
+  margin: loadNumber("teleprompter-margin", 240),
+  opacity: loadNumber("teleprompter-opacity", 100),
+  scrollOffset: loadNumber("teleprompter-scroll-offset", 400),
   language: detectLanguage(),
 }
 
@@ -75,26 +95,32 @@ export const navbarSlice = createAppSlice({
 
     flipHorizontally: create.reducer(state => {
       state.horizontallyFlipped = !state.horizontallyFlipped
+      localStorage.setItem("teleprompter-flip-h", String(state.horizontallyFlipped))
     }),
 
     flipVertically: create.reducer(state => {
       state.verticallyFlipped = !state.verticallyFlipped
+      localStorage.setItem("teleprompter-flip-v", String(state.verticallyFlipped))
     }),
 
     setFontSize: create.reducer((state, action: PayloadAction<number>) => {
       state.fontSize = action.payload
+      localStorage.setItem("teleprompter-font-size", String(action.payload))
     }),
 
     setMargin: create.reducer((state, action: PayloadAction<number>) => {
       state.margin = action.payload
+      localStorage.setItem("teleprompter-margin", String(action.payload))
     }),
 
     setOpacity: create.reducer((state, action: PayloadAction<number>) => {
       state.opacity = action.payload
+      localStorage.setItem("teleprompter-opacity", String(action.payload))
     }),
 
     setScrollOffset: create.reducer((state, action: PayloadAction<number>) => {
       state.scrollOffset = action.payload
+      localStorage.setItem("teleprompter-scroll-offset", String(action.payload))
     }),
 
     setLanguage: create.reducer((state, action: PayloadAction<string>) => {

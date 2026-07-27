@@ -49,35 +49,28 @@ body {
   font-size: 2em;
 }
 
+// All buttons: blue with white text/icons, to match the sliders. (These override
+// the theme defaults; keep the icon colour inheriting so play/stop are white too.)
 .button,
 .button:focus {
-  background-color: $black;
-  border-color: $grey-dark;
-  color: $grey-dark;
+  background-color: $info;
+  border-color: $info;
+  color: $white;
 }
 
 .button:hover {
-  border-color: $grey;
-  color: $grey;
+  background-color: $info-dark;
+  border-color: $info-dark;
+  color: $white;
 }
 
-.fa-play {
-  color: $green;
+.button:disabled {
+  opacity: 0.5;
 }
 
-.fa-stop {
-  color: $red;
-}
-
-.fa-up-down,
-.fa-left-right {
-  color: $grey;
-}
-
-.editing .fa-pencil,
-.vertically-flipped .fa-up-down,
-.horizontally-flipped .fa-left-right {
-  color: $yellow;
+.button .icon,
+.button .fa-solid {
+  color: $white;
 }
 
 .slider > span {
@@ -91,6 +84,8 @@ body {
 
 input[type="range"] {
   width: 80px;
+  // Match the buttons' blue (Bulma `is-info`) so sliders and buttons read as one set.
+  accent-color: $info;
 }
 
 .navbar-brand ul {

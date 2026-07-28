@@ -82,7 +82,7 @@ export const parseScript = (id: string, markdown: string): Episode => {
   flush()
 
   const label = id
-    .replace(/^(ep\d+)-/, "$1 · ")
+    .replace(/^(ep[\dX]+)-/, "$1 · ")
     .replace(/-/g, " ")
 
   return { id, label, beats }
@@ -91,18 +91,23 @@ export const parseScript = (id: string, markdown: string): Episode => {
 // Load every episode script at build/dev time. `import.meta.glob` with `as: "raw"`
 // gives the file contents as strings; `eager` so they're available synchronously.
 // The alias `@episodes` points at ../snapcd-videos/episodes (see vite.config.ts).
-const modules = import.meta.glob("@episodes/*/script.md", {
-  query: "?raw",
-  import: "default",
-  eager: true,
-}) as Record<string, string>
+// Episodes are grouped by series: episodes/<series>/<ep>/script.md, with unscheduled
+// ones one level deeper in episodes/<series>/_backlog/<ep>/script.md.
+const modules = import.meta.glob(
+  ["@episodes/*/*/script.md", "@episodes/*/_backlog/*/script.md"],
+  {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  },
+) as Record<string, string>
 
 /** All episodes, parsed and sorted by id, each with its beats. */
 export const loadEpisodes = (): Episode[] => {
   return Object.entries(modules)
     .map(([path, raw]) => {
-      // path like ".../episodes/ep01-introducing-snapcd/script.md"
-      const m = path.match(/episodes\/([^/]+)\/script\.md$/)
+      // path like ".../episodes/showcase/ep01-introducing-snapcd/script.md"
+      const m = path.match(/([^/]+)\/script\.md$/)
       const id = m ? m[1] : path
       return parseScript(id, raw)
     })

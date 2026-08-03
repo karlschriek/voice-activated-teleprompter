@@ -114,3 +114,15 @@ export const loadEpisodes = (): Episode[] => {
     .filter(ep => ep.beats.length > 0)
     .sort((a, b) => a.id.localeCompare(b.id))
 }
+
+/** Parsed once at module load — shared by the navbar, thunks, and slices. */
+export const EPISODES = loadEpisodes()
+
+// Beat-boundary marker used when a whole episode is combined into one script.
+// The "§" prefix distinguishes these from ordinary [bracket] hints in the beat
+// text itself (e.g. the [CAM]/[DIAG]/[SCREEN] cut cues), so skip-to-next-beat can
+// find real boundaries.
+export const BEAT_MARKER_PREFIX = "[§ "
+
+export const combineEpisode = (ep: Episode): string =>
+  ep.beats.map(b => `${BEAT_MARKER_PREFIX}${b.label}]\n\n${b.text}`).join("\n\n\n")

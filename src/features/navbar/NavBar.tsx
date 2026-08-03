@@ -1,11 +1,15 @@
-import { useState } from "react"
-
 import { useAppDispatch, useAppSelector } from "../../app/hooks"
 
-import { startTeleprompter, stopTeleprompter, changeLanguage } from "../../app/thunks"
+import {
+  startTeleprompter,
+  stopTeleprompter,
+  changeLanguage,
+  loadBeat,
+  loadWholeEpisode,
+  skipBeat,
+} from "../../app/thunks"
 
-import { loadEpisodes } from "../../lib/script-parser"
-import { setContent } from "../content/contentSlice"
+import { EPISODES } from "../../lib/script-parser"
 
 import {
   toggleEdit,
@@ -23,9 +27,13 @@ import {
 
 import { resetTranscriptionIndices } from "../content/contentSlice"
 
-// Parsed once at module load (the episode glob is eager). Reading a beat from the
-// dropdown loads its verbatim text into the prompter — single source of truth.
-const EPISODES = loadEpisodes()
+import {
+  setEpisodeId,
+  setByBeat,
+  selectEpisodeId,
+  selectByBeat,
+  selectBeatIndex,
+} from "../episode/episodeSlice"
 
 // Shared dark styling for the navbar <select>s.
 const selectStyle: React.CSSProperties = {
@@ -43,27 +51,12 @@ export const NavBar = () => {
   const opacity = useAppSelector(selectOpacity)
   const language = useAppSelector(selectLanguage)
 
-  const [episodeId, setEpisodeId] = useState<string>(EPISODES[0]?.id ?? "")
-  const selectedEpisode = EPISODES.find(ep => ep.id === episodeId) ?? EPISODES[0]
-
+  const episodeId = useAppSelector(selectEpisodeId)
   // "By beat": when on, pick a single beat from the dropdown. When off, load the
   // whole episode — all beats combined into one continuous script.
-  const [byBeat, setByBeat] = useState<boolean>(true)
-
-  const loadBeat = (beatIndex: number) => {
-    const beat = selectedEpisode?.beats[beatIndex]
-    if (beat) dispatch(setContent(beat.text))
-  }
-
-  // All beats of the current episode, joined into one script. Each beat's label is
-  // dropped in as a [bracket] cue so you can see where you are while reading through.
-  const loadWholeEpisode = (ep = selectedEpisode) => {
-    if (!ep) return
-    const combined = ep.beats
-      .map(b => `[${b.label}]\n\n${b.text}`)
-      .join("\n\n\n")
-    dispatch(setContent(combined))
-  }
+  const byBeat = useAppSelector(selectByBeat)
+  const beatIndex = useAppSelector(selectBeatIndex)
+  const selectedEpisode = EPISODES.find(ep => ep.id === episodeId) ?? EPISODES[0]
 
   return (
     <nav
@@ -82,10 +75,10 @@ export const NavBar = () => {
                     value={episodeId}
                     onChange={e => {
                       const newId = e.currentTarget.value
-                      setEpisodeId(newId)
+                      dispatch(setEpisodeId(newId))
                       // If reading the whole episode, load the new one immediately.
                       if (!byBeat) {
-                        loadWholeEpisode(EPISODES.find(ep => ep.id === newId))
+                        dispatch(loadWholeEpisode(newId))
                       }
                     }}
                     title="Select Episode"
@@ -109,8 +102,8 @@ export const NavBar = () => {
                     checked={byBeat}
                     onChange={e => {
                       const on = e.currentTarget.checked
-                      setByBeat(on)
-                      if (!on) loadWholeEpisode()
+                      dispatch(setByBeat(on))
+                      if (!on) dispatch(loadWholeEpisode())
                     }}
                   />
                   <span>By beat</span>
@@ -120,10 +113,10 @@ export const NavBar = () => {
                 {byBeat ? (
                   <div className="select is-small is-dark">
                     <select
-                      defaultValue=""
+                      value={beatIndex === -1 ? "" : String(beatIndex)}
                       onChange={e => {
                         const i = parseInt(e.currentTarget.value, 10)
-                        if (!Number.isNaN(i)) loadBeat(i)
+                        if (!Number.isNaN(i)) dispatch(loadBeat(i))
                       }}
                       title="Select Beat"
                       style={selectStyle}
@@ -241,6 +234,17 @@ export const NavBar = () => {
                 </button>
               </>
             ) : null}
+
+            <button
+              className="button is-info"
+              disabled={status === "editing" || EPISODES.length === 0}
+              onClick={() => dispatch(skipBeat())}
+              title="Skip to next beat (N / PageDown)"
+            >
+              <span className="icon is-small">
+                <i className="fa-solid fa-forward-step" />
+              </span>
+            </button>
 
             <button
               className="button is-info"

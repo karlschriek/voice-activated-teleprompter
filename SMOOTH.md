@@ -342,7 +342,9 @@ replace the rAF loop):
 5. **Paragraph / `[hint]` crossing** — no stall, a brief natural acceleration
    across the gap.
 6. **Hard limits** — deliberately out-read the scroll: word visibly never enters
-   the last line; deliberately stop mid-catch-up: word never enters the first.
+   the last line; deliberately stop mid-catch-up: wor> And yes yes, that is what you should do, and every instinct as a software engineer will also tell you to make
+> individual building blocks smaller and easier to manage. But, how?! How
+d never enters the first.
 
 Acceptance: no frame where speed visibly steps; no stop-start during continuous
 speech; limits never violated.

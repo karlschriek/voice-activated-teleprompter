@@ -19,7 +19,7 @@ import {
   selectInterimTranscriptIndex,
 } from "./contentSlice"
 
-import { startTeleprompter, stopTeleprompter } from "../../app/thunks"
+import { startTeleprompter, stopTeleprompter, skipBeat } from "../../app/thunks"
 import {
   buildLayoutMap,
   pxAt,
@@ -209,6 +209,9 @@ export const Content = () => {
         event.preventDefault();
         dispatch(setFinalTranscriptIndex(Math.min(maxIndex, finalTranscriptIndex + 5)));
         dispatch(setInterimTranscriptIndex(Math.min(maxIndex, interimTranscriptIndex + 5)));
+      } else if (event.code === "KeyN" || event.code === "PageDown") {
+        event.preventDefault();
+        dispatch(skipBeat());
       }
     };
 

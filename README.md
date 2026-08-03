@@ -10,6 +10,19 @@ This web-based single-page application (SPA) is a voice-activated teleprompter, 
 
 You can try it live [here](https://jlecomte.github.io/voice-activated-teleprompter/dist/).
 
+## Running locally
+
+```bash
+npm run dev        # Vite dev server → http://localhost:5173
+```
+
+Use **Chrome** — the speech recognition relies on the Web Speech API. The episode
+picker loads scripts from the sibling `support/snapcd-videos/episodes/` folder (the
+`@episodes` Vite alias), so run it from within this monorepo. During a prompter
+session the tracked reading position is logged and auto-downloaded as
+`prompter-log-<timestamp>.json` when you press Stop (sessions with fewer than 10
+tracked words don't download).
+
 **Instructions:** Once you've opened the live demo, click on the `Edit` button in the toolbar. Paste your script into the content area and click on the `Edit` button again to validate. Then, click on the `Play` button in the toolbar and start reading your script. If you need to take a break, you can click on the `Stop` button at any time, and then later resume the transcription by clicking on the `Play` button again. You can also click on individual words in your script to reset the transcription to a specific index in case you need to re-read a section of your script.
 
 **Hints:** You can add inline hints to your script by wrapping text in square brackets, e.g. `[pause here]` or `[look at camera]`. Hints are displayed in the teleprompter text but are ignored by the speech recognition engine, so they won't interfere with auto-scrolling.
@@ -24,3 +37,7 @@ You can try it live [here](https://jlecomte.github.io/voice-activated-teleprompt
 | `Arrow Down` | Jump forward 15 words |
 | `Arrow Left` | Jump back 5 words |
 | `Arrow Right` | Jump forward 5 words |
+| `N` / `Page Down` | Skip to the next beat (also a toolbar button). In "by beat" mode this loads the next beat; in whole-episode mode it jumps to the next `[§ …]` beat marker. |
+
+In "by beat" mode the prompter also **advances to the next beat automatically** when
+you finish reading the current one.

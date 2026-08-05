@@ -17,7 +17,7 @@ npm run dev        # Vite dev server → http://localhost:5173
 ```
 
 Use **Chrome** — the speech recognition relies on the Web Speech API. The episode
-picker loads scripts from the sibling `support/snapcd-videos/episodes/` folder (the
+picker loads scripts from the sibling `content/snapcd-videos/episodes/` folder (the
 `@episodes` Vite alias), so run it from within this monorepo. During a prompter
 session the tracked reading position is logged and auto-downloaded as
 `prompter-log-<timestamp>.json` when you press Stop (sessions with fewer than 10
